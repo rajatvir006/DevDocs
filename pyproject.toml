@@ -1,0 +1,17 @@
+[project]
+name = "devdocs"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "chromadb>=1.5.5",
+    "fastembed>=0.8.0",
+    "langchain>=1.2.14",
+    "langchain-community>=0.4.1",
+    "langchain-core>=1.2.23",
+    "langchain-text-splitters>=1.1.1",
+    "pypdf>=6.9.2",
+    "streamlit>=1.56.0",
+    "streamlit-chat>=0.1.1",
+]
