@@ -24,25 +24,32 @@ class DevDocsCopilot:
             chunk_size=400,
             chunk_overlap=50
         )
-        self.prompt = PromptTemplate.from_template(
-"""
-You are DevDocs Copilot.
+        self.prompt = PromptTemplate.from_template("""
+You are DevDocs Copilot, a strict document-based assistant.
 
-STRICT RULES:
-- Answer ONLY from the context.
-- If answer is not explicitly present, say EXACTLY:
-  "I don't know based on the document."
-- DO NOT use general knowledge.
-- DO NOT guess.
+RULES (must follow):
 
-Context:
+1. Answer ONLY using the provided CONTEXT.
+2. Do NOT use any outside knowledge.
+3. If the answer is NOT clearly found in the context, reply EXACTLY:
+   "I don't know based on the document."
+4. Do NOT guess.
+5. Do NOT partially answer.
+6. Keep the answer concise and directly based on the context.
+7. If possible, use phrases directly from the context.
+
+---------------------
+CONTEXT:
 {context}
+---------------------
 
-Question: {question}
+QUESTION:
+{question}
 
-Answer:
-"""
-)
+---------------------
+
+ANSWER:
+""")
 
     def ingest(self, pdf_file_path: str):
         docs = PyMuPDFLoader(file_path=pdf_file_path).load()
