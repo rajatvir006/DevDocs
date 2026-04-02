@@ -10,18 +10,17 @@ st.set_page_config(page_title="DevDocs Copilot")
 
 def display_messages():
     st.subheader("Chat")
-    for i, (msg, is_user) in enumerate(st.session_state["messages"]):
-        message(msg, is_user=is_user, key=str(i))
-    st.session_state["thinking_spinner"] = st.empty()
+    for msg, is_user in st.session_state["messages"]:
+        with st.chat_message("user" if is_user else "assistant"):
+            st.write(msg)
 
 
-def process_input():
-    if st.session_state["user_input"] and len(st.session_state["user_input"].strip()) > 0:
-        user_text = st.session_state["user_input"].strip()
-        with st.session_state["thinking_spinner"], st.spinner(f"Thinking"):
-            agent_text = st.session_state["assistant"].ask(user_text)
+def process_input(query):
+    if query and len(query.strip()) > 0:
+        with st.spinner(f"Thinking"):
+            agent_text = st.session_state["assistant"].ask(query)
 
-        st.session_state["messages"].append((user_text, True))
+        st.session_state["messages"].append((query, True))
         st.session_state["messages"].append((agent_text, False))
 
 
@@ -59,7 +58,9 @@ def page():
     st.session_state["ingestion_spinner"] = st.empty()
 
     display_messages()
-    st.text_input("Message", key="user_input", on_change=process_input)
+    user_input = st.chat_input("Message")
+    if user_input:
+        process_input(user_input)
 
 
 if __name__ == "__main__":
