@@ -1,8 +1,8 @@
 from langchain_community.vectorstores import Chroma
-from langchain_community.chat_models import ChatOllama
+from langchain_ollama import ChatOllama
 from langchain_community.embeddings import FastEmbedEmbeddings
 from langchain_core.output_parsers import StrOutputParser
-from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.prompts import PromptTemplate
@@ -21,27 +21,31 @@ class DevDocsCopilot:
             temperature=0
         )
         self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=800,
-            chunk_overlap=150
+            chunk_size=400,
+            chunk_overlap=50
         )
         self.prompt = PromptTemplate.from_template(
-    """You are DevDocs Copilot, an AI assistant for developers.
+"""
+You are DevDocs Copilot.
 
-Use ONLY the provided context to answer the question.
-If the answer is not in the context, say "I don't know based on the document."
-
-Be precise, structured, and helpful.
+STRICT RULES:
+- Answer ONLY from the context.
+- If answer is not explicitly present, say EXACTLY:
+  "I don't know based on the document."
+- DO NOT use general knowledge.
+- DO NOT guess.
 
 Context:
 {context}
 
 Question: {question}
 
-Answer:"""
+Answer:
+"""
 )
 
     def ingest(self, pdf_file_path: str):
-        docs = PyPDFLoader(file_path=pdf_file_path).load()
+        docs = PyMuPDFLoader(file_path=pdf_file_path).load()
         chunks = self.text_splitter.split_documents(docs)
         chunks = filter_complex_metadata(chunks)
 
@@ -56,8 +60,8 @@ Answer:"""
         self.retriever = self.vector_store.as_retriever(
             search_type="similarity_score_threshold",
             search_kwargs={
-                "k": 5,
-                "score_threshold": 0.3,
+                "k": 2,
+                "score_threshold": 0.5,
             },
         )
 

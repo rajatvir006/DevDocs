@@ -10,6 +10,7 @@ dependencies = [
     "langchain>=1.2.14",
     "langchain-community>=0.4.1",
     "langchain-core>=1.2.23",
+    "langchain-ollama>=0.2.0",
     "langchain-text-splitters>=1.1.1",
     "pypdf>=6.9.2",
     "streamlit>=1.56.0",
