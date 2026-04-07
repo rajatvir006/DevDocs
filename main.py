@@ -57,10 +57,11 @@ def page():
 
     st.session_state["ingestion_spinner"] = st.empty()
 
-    display_messages()
     user_input = st.chat_input("Message")
     if user_input:
         process_input(user_input)
+    
+    display_messages()
 
 
 if __name__ == "__main__":
