@@ -24,25 +24,52 @@ def process_input(query):
         st.session_state["messages"].append((agent_text, False))
 
 
+# def read_and_save_file():
+#     # st.session_state["assistant"].clear()
+#     # st.session_state["messages"] = []
+#     st.session_state["user_input"] = ""
+
+#     for file in st.session_state["file_uploader"]:
+#         with tempfile.NamedTemporaryFile(delete=False) as tf:
+#             tf.write(file.getbuffer())
+#             file_path = tf.name
+
+#         with st.session_state["ingestion_spinner"], st.spinner(f"Ingesting {file.name}"):
+#             st.session_state["assistant"].ingest(file_path)
+#         os.remove(file_path)
+
 def read_and_save_file():
-    st.session_state["assistant"].clear()
-    st.session_state["messages"] = []
     st.session_state["user_input"] = ""
 
     for file in st.session_state["file_uploader"]:
+        #  SKIP already ingested files
+        if file.name in st.session_state["files"]:
+            continue
+
+        # mark as ingested
+        st.session_state["files"].add(file.name)
+
         with tempfile.NamedTemporaryFile(delete=False) as tf:
             tf.write(file.getbuffer())
             file_path = tf.name
 
         with st.session_state["ingestion_spinner"], st.spinner(f"Ingesting {file.name}"):
             st.session_state["assistant"].ingest(file_path)
+
         os.remove(file_path)
 
-
 def page():
-    if len(st.session_state) == 0:
+      # initialize messages
+    if "messages" not in st.session_state:
         st.session_state["messages"] = []
+
+    # initialize assistant
+    if "assistant" not in st.session_state:
         st.session_state["assistant"] = DevDocsCopilot()
+
+    # 🆕 initialize file tracking
+    if "files" not in st.session_state:
+        st.session_state["files"] = set()
     st.header("DevDocs Copilot")
 
     st.subheader("Upload a document")
