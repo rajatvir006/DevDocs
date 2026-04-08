@@ -17,36 +17,20 @@ def display_messages():
 
 def process_input(query):
     if query and len(query.strip()) > 0:
-        with st.spinner(f"Thinking"):
+        with st.spinner("Thinking"):
             agent_text = st.session_state["assistant"].ask(query)
 
         st.session_state["messages"].append((query, True))
         st.session_state["messages"].append((agent_text, False))
 
 
-# def read_and_save_file():
-#     # st.session_state["assistant"].clear()
-#     # st.session_state["messages"] = []
-#     st.session_state["user_input"] = ""
-
-#     for file in st.session_state["file_uploader"]:
-#         with tempfile.NamedTemporaryFile(delete=False) as tf:
-#             tf.write(file.getbuffer())
-#             file_path = tf.name
-
-#         with st.session_state["ingestion_spinner"], st.spinner(f"Ingesting {file.name}"):
-#             st.session_state["assistant"].ingest(file_path)
-#         os.remove(file_path)
-
 def read_and_save_file():
     st.session_state["user_input"] = ""
 
     for file in st.session_state["file_uploader"]:
-        #  SKIP already ingested files
         if file.name in st.session_state["files"]:
             continue
 
-        # mark as ingested
         st.session_state["files"].add(file.name)
 
         with tempfile.NamedTemporaryFile(delete=False) as tf:
@@ -58,18 +42,26 @@ def read_and_save_file():
 
         os.remove(file_path)
 
+
+def delete_file(file_name):
+    # (will fix properly in next step)
+    st.session_state["assistant"].vector_store.delete(
+        where={"source": file_name}
+    )
+    st.session_state["files"].remove(file_name)
+
+
 def page():
-      # initialize messages
+    # ✅ initialize FIRST
     if "messages" not in st.session_state:
         st.session_state["messages"] = []
 
-    # initialize assistant
     if "assistant" not in st.session_state:
         st.session_state["assistant"] = DevDocsCopilot()
 
-    # 🆕 initialize file tracking
     if "files" not in st.session_state:
         st.session_state["files"] = set()
+
     st.header("DevDocs Copilot")
 
     st.subheader("Upload a document")
@@ -84,10 +76,23 @@ def page():
 
     st.session_state["ingestion_spinner"] = st.empty()
 
+    # ✅ FILE LIST (correct placement)
+    st.subheader("📄 Files in DB")
+
+    for file in list(st.session_state["files"]):
+        col1, col2 = st.columns([4, 1])
+
+        with col1:
+            st.write(file)
+
+        with col2:
+            if st.button("❌", key=f"delete_{file}"):
+                delete_file(file)
+
     user_input = st.chat_input("Message")
     if user_input:
         process_input(user_input)
-    
+
     display_messages()
 
 
