@@ -38,17 +38,34 @@ def read_and_save_file():
             file_path = tf.name
 
         with st.session_state["ingestion_spinner"], st.spinner(f"Ingesting {file.name}"):
-            st.session_state["assistant"].ingest(file_path)
+            st.session_state["assistant"].ingest(file_path, file.name)
 
         os.remove(file_path)
 
 
 def delete_file(file_name):
-    # (will fix properly in next step)
-    st.session_state["assistant"].vector_store.delete(
-        where={"source": file_name}
-    )
-    st.session_state["files"].remove(file_name)
+    assistant = st.session_state["assistant"]
+
+    # delete using metadata filter
+    if assistant.vector_store is not None:
+        assistant.vector_store.delete(where={"source": file_name})
+
+    # remove from tracking
+    st.session_state["files"].discard(file_name)
+
+    # also remove from file uploader to prevent re-ingestion
+    st.session_state["file_uploader"] = [
+        f for f in st.session_state["file_uploader"] if f.name != file_name
+    ]
+
+    # if no files remain, reset the assistant state
+    if not st.session_state["files"]:
+        assistant.clear()
+    else:
+        assistant.retriever = assistant.vector_store.as_retriever(
+            search_type="similarity_score_threshold",
+            search_kwargs={"k": 2, "score_threshold": 0.5},
+        )
 
 
 def page():
@@ -87,7 +104,13 @@ def page():
 
         with col2:
             if st.button("❌", key=f"delete_{file}"):
-                delete_file(file)
+                st.session_state["to_delete"] = file
+
+    # handle deletion after loop to avoid double-click
+    if "to_delete" in st.session_state:
+        delete_file(st.session_state["to_delete"])
+        del st.session_state["to_delete"]
+
 
     user_input = st.chat_input("Message")
     if user_input:

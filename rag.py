@@ -51,10 +51,14 @@ QUESTION:
 ANSWER:
 """)
 
-    def ingest(self, pdf_file_path: str):
+    def ingest(self, pdf_file_path: str, file_name: str):
         docs = PyMuPDFLoader(file_path=pdf_file_path).load()
         chunks = self.text_splitter.split_documents(docs)
         chunks = filter_complex_metadata(chunks)
+
+        # add source metadata for deletion
+        for chunk in chunks:
+            chunk.metadata["source"] = file_name
 
         if self.vector_store is None:
             self.vector_store = Chroma.from_documents(
