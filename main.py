@@ -2,6 +2,7 @@
 import os
 import tempfile
 import streamlit as st
+from streamlit_chat import message
 from rag import DevDocsCopilot
 
 st.set_page_config(page_title="DevDocs Copilot")
@@ -24,6 +25,8 @@ def process_input(query):
 
 
 def read_and_save_file():
+    st.session_state["user_input"] = ""
+
     for file in st.session_state["file_uploader"]:
         if file.name in st.session_state["files"]:
             continue
@@ -34,37 +37,22 @@ def read_and_save_file():
             tf.write(file.getbuffer())
             file_path = tf.name
 
-        with st.spinner(f"Ingesting {file.name}"):
-            st.session_state["assistant"].ingest(file_path, file.name)
+        with st.session_state["ingestion_spinner"], st.spinner(f"Ingesting {file.name}"):
+            st.session_state["assistant"].ingest(file_path)
 
         os.remove(file_path)
 
 
 def delete_file(file_name):
-    assistant = st.session_state["assistant"]
-
-    # delete using stored IDs
-    ids = assistant.file_chunk_map.pop(file_name, [])
-    if assistant.vector_store is not None and ids:
-        assistant.vector_store.delete(ids=ids)
-
-    # remove tracking
-    st.session_state["files"].discard(file_name)
-
-    # if no files remain, reset the assistant state
-    if not st.session_state["files"]:
-        assistant.clear()
-    else:
-        assistant.retriever = assistant.vector_store.as_retriever(
-            search_type="similarity_score_threshold",
-            search_kwargs={"k": 2, "score_threshold": 0.5},
-        )
-
-    st.rerun()
+    # (will fix properly in next step)
+    st.session_state["assistant"].vector_store.delete(
+        where={"source": file_name}
+    )
+    st.session_state["files"].remove(file_name)
 
 
 def page():
-    # initialize state
+    # ✅ initialize FIRST
     if "messages" not in st.session_state:
         st.session_state["messages"] = []
 
@@ -86,7 +74,9 @@ def page():
         accept_multiple_files=True,
     )
 
-    # show files
+    st.session_state["ingestion_spinner"] = st.empty()
+
+    # ✅ FILE LIST (correct placement)
     st.subheader("📄 Files in DB")
 
     for file in list(st.session_state["files"]):
@@ -99,7 +89,6 @@ def page():
             if st.button("❌", key=f"delete_{file}"):
                 delete_file(file)
 
-    # chat
     user_input = st.chat_input("Message")
     if user_input:
         process_input(user_input)
