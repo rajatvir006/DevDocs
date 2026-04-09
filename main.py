@@ -25,9 +25,10 @@ def process_input(query):
 
 
 def read_and_save_file():
-    st.session_state["user_input"] = ""
+    uploader_key = st.session_state.get("uploader_key", 0)
+    uploader_state_key = f"file_uploader_{uploader_key}"
 
-    for file in st.session_state["file_uploader"]:
+    for file in st.session_state[uploader_state_key]:
         if file.name in st.session_state["files"]:
             continue
 
@@ -53,10 +54,8 @@ def delete_file(file_name):
     # remove from tracking
     st.session_state["files"].discard(file_name)
 
-    # also remove from file uploader to prevent re-ingestion
-    st.session_state["file_uploader"] = [
-        f for f in st.session_state["file_uploader"] if f.name != file_name
-    ]
+    # clear uploader by changing its key
+    st.session_state["uploader_key"] = st.session_state.get("uploader_key", 0) + 1
 
     # if no files remain, reset the assistant state
     if not st.session_state["files"]:
@@ -79,13 +78,18 @@ def page():
     if "files" not in st.session_state:
         st.session_state["files"] = set()
 
+    if "uploader_key" not in st.session_state:
+        st.session_state["uploader_key"] = 0
+
     st.header("DevDocs Copilot")
+
+    uploader_key = st.session_state.get("uploader_key", 0)
 
     st.subheader("Upload a document")
     st.file_uploader(
         "Upload document",
         type=["pdf"],
-        key="file_uploader",
+        key=f"file_uploader_{uploader_key}",
         on_change=read_and_save_file,
         label_visibility="collapsed",
         accept_multiple_files=True,
@@ -104,12 +108,8 @@ def page():
 
         with col2:
             if st.button("❌", key=f"delete_{file}"):
-                st.session_state["to_delete"] = file
-
-    # handle deletion after loop to avoid double-click
-    if "to_delete" in st.session_state:
-        delete_file(st.session_state["to_delete"])
-        del st.session_state["to_delete"]
+                delete_file(file)
+                st.rerun()
 
 
     user_input = st.chat_input("Message")
