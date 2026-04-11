@@ -5,43 +5,125 @@ import tempfile
 import streamlit as st
 from rag import DevDocsCopilot
 
-CHAT_HISTORY_FILE = "messages.json"
+CHAT_HISTORY_FILE = "chats.json"
 
 st.set_page_config(page_title="DevDocs Copilot")
 
 
-def load_messages():
+def load_chats():
     if os.path.exists(CHAT_HISTORY_FILE):
         try:
             with open(CHAT_HISTORY_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            if isinstance(data, list):
-                return [tuple(item) for item in data if isinstance(item, list) and len(item) == 2]
+            if isinstance(data, dict):
+                chats = {}
+                for name, messages in data.items():
+                    if isinstance(messages, list):
+                        chats[name] = [tuple(item) for item in messages if isinstance(item, list) and len(item) == 2]
+                if chats:
+                    return chats
         except Exception:
-            return []
-    return []
+            pass
+    return {"Default": []}
 
 
-def save_messages():
+def save_chats():
+    serializable = {
+        name: [[msg, is_user] for msg, is_user in history]
+        for name, history in st.session_state["chats"].items()
+    }
     with open(CHAT_HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(list(st.session_state["messages"]), f, ensure_ascii=False, indent=2)
+        json.dump(serializable, f, ensure_ascii=False, indent=2)
 
 
-def display_messages():
-    st.subheader("Chat")
-    for msg, is_user in st.session_state["messages"]:
-        with st.chat_message("user" if is_user else "assistant"):
-            st.write(msg)
+def get_current_chat_messages():
+    current = st.session_state["current_chat"]
+    return st.session_state["chats"].setdefault(current, [])
+
+
+def add_chat(chat_name: str):
+    chat_name = chat_name.strip()
+    if not chat_name or chat_name in st.session_state["chats"]:
+        return
+    st.session_state["chats"][chat_name] = []
+    st.session_state["current_chat"] = chat_name
+    save_chats()
+
+
+def create_chat():
+    chat_name = st.session_state.get("new_chat_name", "").strip()
+    if not chat_name:
+        st.toast("Enter a chat name.")
+        return
+    if chat_name in st.session_state["chats"]:
+        st.toast("That chat name already exists.")
+        return
+    add_chat(chat_name)
+    st.session_state["clear_new_chat_name"] = True
+
+
+def rename_chat(new_name: str):
+    current = st.session_state["current_chat"]
+    new_name = new_name.strip()
+    if not new_name or new_name == current or new_name in st.session_state["chats"]:
+        return
+
+    st.session_state["chats"][new_name] = st.session_state["chats"].pop(current)
+    st.session_state["current_chat"] = new_name
+    save_chats()
+
+
+def rename_current_chat():
+    new_name = st.session_state.get("rename_chat_name", "").strip()
+    if not new_name:
+        st.toast("Enter a new chat name.")
+        return
+    current = st.session_state["current_chat"]
+    if new_name == current:
+        st.toast("This is already the current chat name.")
+        return
+    if new_name in st.session_state["chats"]:
+        st.toast("That chat name already exists.")
+        return
+    rename_chat(new_name)
+    st.session_state["clear_rename_chat_name"] = True
+
+
+def delete_chat(chat_name: str):
+    if chat_name not in st.session_state["chats"]:
+        return
+
+    st.session_state["chats"].pop(chat_name)
+    if not st.session_state["chats"]:
+        st.session_state["chats"]["Default"] = []
+    st.session_state["current_chat"] = next(iter(st.session_state["chats"]))
+    save_chats()
+
+
+def clear_current_chat():
+    current = st.session_state["current_chat"]
+    if current not in st.session_state["chats"]:
+        return
+
+    if not st.session_state["chats"][current]:
+        st.toast("Current chat is already cleared.")
+        return
+
+    st.session_state["chats"][current] = []
+    save_chats()
 
 
 def process_input(query):
-    if query and len(query.strip()) > 0:
-        with st.spinner("Thinking"):
-            agent_text = st.session_state["assistant"].ask(query)
+    if not query or not query.strip():
+        return
 
-        st.session_state["messages"].append((query, True))
-        st.session_state["messages"].append((agent_text, False))
-        save_messages()
+    with st.spinner("Thinking"):
+        assistant_text = st.session_state["assistant"].ask(query)
+
+    current_messages = get_current_chat_messages()
+    current_messages.append((query, True))
+    current_messages.append((assistant_text, False))
+    save_chats()
 
 
 def read_and_save_file():
@@ -85,27 +167,78 @@ def delete_file(file_name):
 
 
 def page():
-    # ✅ initialize FIRST
-    if "messages" not in st.session_state:
-        st.session_state["messages"] = load_messages()
-
+    if "chats" not in st.session_state:
+        st.session_state["chats"] = load_chats()
+    if "current_chat" not in st.session_state:
+        st.session_state["current_chat"] = next(iter(st.session_state["chats"]))
+    if "new_chat_name" not in st.session_state:
+        st.session_state["new_chat_name"] = ""
+    if "rename_chat_name" not in st.session_state:
+        st.session_state["rename_chat_name"] = ""
+    if "clear_new_chat_name" not in st.session_state:
+        st.session_state["clear_new_chat_name"] = False
+    if "clear_rename_chat_name" not in st.session_state:
+        st.session_state["clear_rename_chat_name"] = False
     if "assistant" not in st.session_state:
         st.session_state["assistant"] = DevDocsCopilot()
-
     if "files" not in st.session_state:
         if st.session_state["assistant"].vector_store is not None:
             st.session_state["files"] = st.session_state["assistant"].get_source_files()
         else:
             st.session_state["files"] = set()
-
     if "uploader_key" not in st.session_state:
         st.session_state["uploader_key"] = 0
 
-    st.header("DevDocs Copilot")
+    if st.session_state["clear_new_chat_name"]:
+        st.session_state["new_chat_name"] = ""
+        st.session_state["clear_new_chat_name"] = False
 
-    uploader_key = st.session_state.get("uploader_key", 0)
+    if st.session_state["clear_rename_chat_name"]:
+        st.session_state["rename_chat_name"] = ""
+        st.session_state["clear_rename_chat_name"] = False
+
+    with st.sidebar:
+        st.header("Chats")
+        chat_names = list(st.session_state["chats"].keys())
+        selected_chat = st.selectbox(
+            "Choose session",
+            chat_names,
+            index=chat_names.index(st.session_state["current_chat"]) if st.session_state["current_chat"] in chat_names else 0,
+            key="chat_selector",
+        )
+        if selected_chat != st.session_state["current_chat"]:
+            st.session_state["current_chat"] = selected_chat
+
+        st.write("---")
+        st.text_input(
+            "New chat name",
+            value=st.session_state["new_chat_name"],
+            key="new_chat_name",
+            placeholder="Type name and press Enter",
+            on_change=create_chat,
+        )
+
+        if len(st.session_state["chats"]) > 1:
+            st.button("🗑️ Delete chat", on_click=delete_chat, args=(st.session_state["current_chat"],))
+        else:
+            st.warning("Keep at least one chat.")
+
+        st.button("🧹 Clear current chat", on_click=clear_current_chat)
+
+        st.write("---")
+        st.text_input(
+            "Rename current chat",
+            value=st.session_state["rename_chat_name"],
+            key="rename_chat_name",
+            placeholder="Type new name and press Enter",
+            on_change=rename_current_chat,
+        )
+
+    st.header("DevDocs Copilot")
+    st.subheader(f"Chat: {st.session_state['current_chat']}")
 
     st.subheader("Upload a document")
+    uploader_key = st.session_state.get("uploader_key", 0)
     st.file_uploader(
         "Upload document",
         type=["pdf"],
@@ -117,26 +250,23 @@ def page():
 
     st.session_state["ingestion_spinner"] = st.empty()
 
-    # ✅ FILE LIST (correct placement)
     st.subheader("📄 Files in DB")
-
     for file in list(st.session_state["files"]):
         col1, col2 = st.columns([4, 1])
-
         with col1:
             st.write(file)
-
         with col2:
             if st.button("❌", key=f"delete_{file}"):
                 delete_file(file)
                 st.rerun()
 
-
     user_input = st.chat_input("Message")
     if user_input:
         process_input(user_input)
 
-    display_messages()
+    for msg, is_user in get_current_chat_messages():
+        with st.chat_message("user" if is_user else "assistant"):
+            st.write(msg)
 
 
 if __name__ == "__main__":

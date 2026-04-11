@@ -1,0 +1,14 @@
+{
+  "Test": [],
+  "Rajat": [
+    [
+      "What is LINUX?",
+      true
+    ],
+    [
+      "LINUX, as described in the context provided by DevDocs Copilot, is strictly a Kernel—the core manager of an operating system. It serves as a secure bridge between applications and hardware through System Calls and has a Monolithic but Modular architecture that offers raw speed combined with flexibility.",
+      false
+    ]
+  ],
+  "Rehat": []
+}
