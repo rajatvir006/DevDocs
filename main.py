@@ -2,7 +2,6 @@
 import os
 import tempfile
 import streamlit as st
-from streamlit_chat import message
 from rag import DevDocsCopilot
 
 st.set_page_config(page_title="DevDocs Copilot")
@@ -61,10 +60,7 @@ def delete_file(file_name):
     if not st.session_state["files"]:
         assistant.clear()
     else:
-        assistant.retriever = assistant.vector_store.as_retriever(
-            search_type="similarity_score_threshold",
-            search_kwargs={"k": 2, "score_threshold": 0.5},
-        )
+        assistant._build_retriever_and_chain()
 
 
 def page():
@@ -76,7 +72,10 @@ def page():
         st.session_state["assistant"] = DevDocsCopilot()
 
     if "files" not in st.session_state:
-        st.session_state["files"] = set()
+        if st.session_state["assistant"].vector_store is not None:
+            st.session_state["files"] = st.session_state["assistant"].get_source_files()
+        else:
+            st.session_state["files"] = set()
 
     if "uploader_key" not in st.session_state:
         st.session_state["uploader_key"] = 0

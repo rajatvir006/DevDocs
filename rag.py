@@ -1,3 +1,5 @@
+import os
+
 from langchain_community.vectorstores import Chroma
 from langchain_ollama import ChatOllama
 from langchain_community.embeddings import FastEmbedEmbeddings
@@ -15,6 +17,7 @@ class DevDocsCopilot:
     chain = None
 
     def __init__(self):
+        self.persist_directory = "db"
         self.model = ChatOllama(
             model="phi3",
             base_url='http://localhost:11434',
@@ -51,23 +54,16 @@ QUESTION:
 ANSWER:
 """)
 
-    def ingest(self, pdf_file_path: str, file_name: str):
-        docs = PyMuPDFLoader(file_path=pdf_file_path).load()
-        chunks = self.text_splitter.split_documents(docs)
-        chunks = filter_complex_metadata(chunks)
-
-        # add source metadata for deletion
-        for chunk in chunks:
-            chunk.metadata["source"] = file_name
-
-        if self.vector_store is None:
-            self.vector_store = Chroma.from_documents(
-                documents=chunks,
-                embedding=FastEmbedEmbeddings()
+        if os.path.isdir(self.persist_directory):
+            self.vector_store = Chroma(
+                persist_directory=self.persist_directory,
+                embedding_function=FastEmbedEmbeddings()
             )
+            self._build_retriever_and_chain()
         else:
-            self.vector_store.add_documents(chunks)
+            self.vector_store = None
 
+    def _build_retriever_and_chain(self):
         self.retriever = self.vector_store.as_retriever(
             search_type="similarity_score_threshold",
             search_kwargs={
@@ -87,6 +83,43 @@ ANSWER:
             | self.model
             | StrOutputParser()
         )
+
+    def get_source_files(self):
+        if self.vector_store is None:
+            return set()
+
+        results = self.vector_store.get(
+            include=["metadatas"],
+            limit=100000
+        )
+        metadatas = results.get("metadatas", [])
+        sources = set()
+        for metadata in metadatas:
+            if metadata and isinstance(metadata, dict):
+                source = metadata.get("source")
+                if source:
+                    sources.add(source)
+        return sources
+
+    def ingest(self, pdf_file_path: str, file_name: str):
+        docs = PyMuPDFLoader(file_path=pdf_file_path).load()
+        chunks = self.text_splitter.split_documents(docs)
+        chunks = filter_complex_metadata(chunks)
+
+        # add source metadata for deletion
+        for chunk in chunks:
+            chunk.metadata["source"] = file_name
+
+        if self.vector_store is None:
+            self.vector_store = Chroma.from_documents(
+                documents=chunks,
+                embedding=FastEmbedEmbeddings(),
+                persist_directory=self.persist_directory
+            )
+        else:
+            self.vector_store.add_documents(chunks)
+
+        self._build_retriever_and_chain()
 
     def ask(self, query: str):
         if not self.chain:
