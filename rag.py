@@ -1,6 +1,8 @@
 import os
-
-from langchain_community.vectorstores import Chroma
+try:
+    from langchain_chroma import Chroma
+except ImportError:
+    from langchain_community.vectorstores import Chroma
 from langchain_ollama import ChatOllama
 from langchain_community.embeddings import FastEmbedEmbeddings
 from langchain_core.output_parsers import StrOutputParser

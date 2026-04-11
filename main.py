@@ -1,10 +1,30 @@
 #!/bin/env python3
+import json
 import os
 import tempfile
 import streamlit as st
 from rag import DevDocsCopilot
 
+CHAT_HISTORY_FILE = "messages.json"
+
 st.set_page_config(page_title="DevDocs Copilot")
+
+
+def load_messages():
+    if os.path.exists(CHAT_HISTORY_FILE):
+        try:
+            with open(CHAT_HISTORY_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                return [tuple(item) for item in data if isinstance(item, list) and len(item) == 2]
+        except Exception:
+            return []
+    return []
+
+
+def save_messages():
+    with open(CHAT_HISTORY_FILE, "w", encoding="utf-8") as f:
+        json.dump(list(st.session_state["messages"]), f, ensure_ascii=False, indent=2)
 
 
 def display_messages():
@@ -21,6 +41,7 @@ def process_input(query):
 
         st.session_state["messages"].append((query, True))
         st.session_state["messages"].append((agent_text, False))
+        save_messages()
 
 
 def read_and_save_file():
@@ -66,7 +87,7 @@ def delete_file(file_name):
 def page():
     # ✅ initialize FIRST
     if "messages" not in st.session_state:
-        st.session_state["messages"] = []
+        st.session_state["messages"] = load_messages()
 
     if "assistant" not in st.session_state:
         st.session_state["assistant"] = DevDocsCopilot()
