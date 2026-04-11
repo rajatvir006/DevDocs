@@ -10,4 +10,5 @@ wheels/
 .venv
 
 db/
-messages.json
+
+chats.json
