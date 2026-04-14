@@ -9,6 +9,9 @@ wheels/
 # Virtual environments
 .venv
 
+# Python version management
+.python-version
+
 db/
 
 chats.json
