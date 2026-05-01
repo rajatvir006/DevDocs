@@ -343,8 +343,8 @@ class DocCopilotEngine:
         q = question.lower().strip()
         
         cheap_signal = (
-            len(q.split()) <= 4 or
-            any(p in q for p in ["it", "that", "this", "those"])
+            any(p in q.split() for p in ["it", "that", "this", "those"]) or
+            q.startswith(("tell more", "explain more", "why", "how"))
         )
         
         if cheap_signal:
@@ -355,7 +355,12 @@ class DocCopilotEngine:
         if is_followup:
             retrieval_query = self._rewrite_query(question, history_messages)
 
-        if is_followup:
+        q = question.lower()
+        is_code_query = any(phrase in q for phrase in [
+            "give code", "show code", "write code", "provide code"
+        ])
+
+        if is_followup or is_code_query:
             intent = "specific"
         else:
             intent = self.classify(question)
@@ -397,6 +402,16 @@ class DocCopilotEngine:
             d.metadata.get("source", "").split("::", 1)[-1]
             for d in docs if d.metadata.get("source")
         ))
+
+        if has_code and (is_code_query or intent == "code"):
+            code_blocks = re.findall(r"```[\s\S]*?```", context)
+
+            if code_blocks:
+                return {
+                    "answer": "\n\n".join(code_blocks),
+                    "intent": intent,
+                    "sources": sources
+                }
 
         answer = (_ANSWER_PROMPTS[intent] | self._llm | StrOutputParser()).invoke({
             "context":  context,

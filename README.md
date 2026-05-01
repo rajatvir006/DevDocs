@@ -1,218 +1,84 @@
-# DevDocs Copilot
+# DevDocs Copilot: RAG-based Document QA System
 
-![DevDocs Copilot](https://img.shields.io/badge/DevDocs-Copilot-blue?style=for-the-badge&logo=robot)
+## Overview
+DevDocs Copilot is a Retrieval-Augmented Generation (RAG) based chat system designed to answer user questions strictly based on uploaded PDF documents. It features a conversational interface, document isolation per chat session, and specialized handling for different types of user intents, including factual queries, summaries, and code extraction. The system is designed with strict grounding rules to ensure zero hallucination outside of the provided documents.
 
-An AI-powered document assistant that enables intelligent question-answering based on uploaded PDF documents using Retrieval-Augmented Generation (RAG) technology. Built with LangChain, ChromaDB, and Streamlit for a seamless local-first experience.
+## Features
+* **Document Ingestion:** Parses and chunks PDF documents into manageable segments.
+* **Vector Search:** Uses embeddings and similarity search to retrieve relevant context.
+* **Intent Classification:** Automatically categorizes user queries into specific intents (general, specific, summarize, code) to apply the most effective prompt.
+* **Query Rewriting:** Detects follow-up questions and rewrites them into self-contained queries using chat history.
+* **Strict Grounding:** Refuses to answer questions that cannot be supported by the uploaded document.
+* **Raw Code Extraction:** Uses a fast-path bypass to return raw, unformatted code blocks directly from the context, preventing LLM syntax hallucinations.
+* **Session Isolation:** Strict boundaries ensure users cannot cross-pollinate context or leak data between different chat sessions.
 
-## 🚀 Features
+## Architecture & Data Flow
+The system processes queries through a deterministic, multi-step pipeline:
 
-- **Multi-Session Chat**: Create, rename, and manage multiple independent chat sessions
-- **PDF Document Upload**: Upload multiple PDF files for processing and querying
-- **Intelligent Q&A**: Ask questions and receive answers based exclusively on document content
-- **Document Management**: View, track, and delete uploaded documents
-- **Persistent Storage**: Chat history and embeddings are automatically saved between sessions
-- **Local AI Processing**: Runs entirely on your machine with Ollama and Phi3 model
-- **Vector Embeddings**: FastEmbed for efficient document chunking and similarity search
-- **ChromaDB Integration**: Persistent vector database for fast retrieval
+1. **User Query:** The user submits a question.
+2. **Follow-up Detection & Rewrite:** The system checks if the query relies on previous context (e.g., using pronouns). If so, it uses the chat history to rewrite the question into a self-contained query.
+3. **Intent Classification:** An LLM classifies the query into an actionable intent (`specific`, `summarize`, `code`, `general`).
+4. **Retrieval:** The system queries the vector database using the rewritten query, filtering strictly by the documents uploaded in the current chat session.
+5. **Context Assembly:** The retrieved document chunks are assembled into a context block.
+6. **Answer Generation:** Based on the classified intent, the context and question are passed to a specific prompt template to generate the final response.
 
-## 🛠️ Tech Stack
+## Tech Stack
+* **Backend Framework:** Flask, Python
+* **LLM Orchestration:** LangChain
+* **Vector Database:** ChromaDB
+* **Embeddings:** FastEmbed (Local)
+* **LLM Provider:** Ollama (Local models)
+* **Document Parsing:** PyMuPDF
 
-![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=flat&logo=python)
-![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=flat&logo=streamlit)
-![LangChain](https://img.shields.io/badge/LangChain-1.2+-1C3C3C?style=flat&logo=chainlink)
-![ChromaDB](https://img.shields.io/badge/ChromaDB-1.5+-000000?style=flat&logo=chroma)
-![Ollama](https://img.shields.io/badge/Ollama-Phi3-000000?style=flat&logo=ollama)
-![FastEmbed](https://img.shields.io/badge/FastEmbed-0.8+-FF6B35?style=flat&logo=embed)
+## Example Usage
 
-## 📋 Prerequisites
+**Query 1: Factual Retrieval**
+* **User:** "What is a heap?"
+* **System:** "A heap is a specialized tree-based data structure that satisfies the heap property where for any given node C, if P is its parent node, then key(P) >= key(C)."
 
-- Python 3.12 or higher
-- [Ollama](https://ollama.ai/) installed and running locally
-- Phi3 model pulled in Ollama (`ollama pull phi3`)
+**Query 2: Multi-Concept Reasoning**
+* **User:** "Explain priority queue and its relation to heap"
+* **System:** "A Priority Queue is a specialized queue where each element has a priority associated with it. It is often implemented using heaps, which allow for efficient priority-based operations like insertion and extraction of the maximum or minimum element due to their structure."
 
-## 🔧 Installation
+**Query 3: Out-of-Bounds Question**
+* **User:** "What is the capital of France?"
+* **System:** "I don't know based on the document."
 
-1. **Clone the repository** (if applicable) or ensure you're in the project directory
+**Query 4: Code Extraction**
+* **User:** "Give code for heap implementation"
+* **System:** Returns the raw Python code block directly extracted from the PDF chunk.
 
-2. **Install dependencies using uv**:
+## Limitations
+* **Conversational Memory:** The system occasionally struggles to resolve vague pronouns ("it", "that") and overly brief queries ("why?", "what about that?"), leading to context loss or generic fallback responses.
+* **Code Explanations:** The intent classifier treats queries like "Explain this code" as requests to *extract* code rather than explain it. This triggers the raw bypass and returns fragmented text instead of an LLM-generated explanation.
+* **Truncated Code Extraction:** The document chunking process can split long code blocks. If a code block spans multiple chunks, the raw extraction bypass may return incomplete code.
+
+## Setup Instructions
+
+1. **Clone the repository and set up a virtual environment:**
    ```bash
-   uv pip install -e .
+   python -m venv venv
+   source venv/bin/activate  # On Windows use: .\venv\Scripts\activate
    ```
 
-3. **Verify Ollama is running**:
+2. **Install dependencies:**
    ```bash
-   ollama serve
-   ollama pull phi3
+   pip install -r requirements.txt
    ```
 
-## 📖 Usage
+3. **Start the local LLM server:**
+   Ensure Ollama is installed and running locally on port 11434. Pull your desired model (e.g., `phi3` or `llama3`).
 
-1. **Start the application**:
+4. **Run the application:**
    ```bash
-   streamlit run main.py
+   cd backend
+   python app.py
    ```
+   The API will be available at `http://localhost:5000`.
 
-2. **Open your browser** to the provided local URL (typically http://localhost:8501)
+Basic evaluation scripts are included under `/tests` to validate performance and conversational behavior.
 
-3. **Manage Chat Sessions** (Sidebar):
-   - Select an existing chat from the dropdown or create a new one
-   - Rename the current chat session
-   - Delete a chat session (must keep at least one)
-   - Clear all messages in the current chat
-   - All conversations auto-save to `chats.json`
-
-4. **Upload PDF Documents**:
-   - Click the upload area in the main panel
-   - Select one or more PDF files
-   - Files are processed and indexed for searching
-   - Uploaded files are tracked and can be deleted later
-
-5. **Ask Questions**:
-   - Type your questions in the input area
-   - The assistant searches relevant document chunks
-   - Answers are based exclusively on document content
-   - Questions shorter than 3 characters are rejected
-
-6. **Manage Documents**:
-   - Uploaded documents are displayed in the session
-   - Delete documents to remove them from the knowledge base
-   - Deleted documents are removed from ChromaDB
-
-## 🏗️ Architecture
-
-### RAG Pipeline
-
-DevDocs Copilot implements a complete Retrieval-Augmented Generation pipeline:
-
-1. **Document Ingestion** (`ingest` method):
-   - Load PDFs using PyMuPDFLoader
-   - Extract and clean document text
-   - Filter complex metadata entries
-
-2. **Text Chunking**:
-   - Split documents into 400-character chunks
-   - 50-character overlap between chunks for context continuity
-   - Preserve metadata (source file information)
-
-3. **Embedding & Storage**:
-   - Generate embeddings using FastEmbed
-   - Store in ChromaDB with source metadata
-   - Persistent storage in `db/` directory
-
-4. **Retrieval**:
-   - Similarity search with threshold of 0.5
-   - Return top 2 most relevant chunks
-   - Source tracking for document attribution
-
-5. **Answer Generation**:
-   - Use Phi3 model (via Ollama)
-   - Context-based prompt with strict instructions
-   - Deterministic output (temperature = 0)
-   - Always responds based on context only
-
-### UI Components
-
-- **Sidebar**: Chat session management and controls
-- **Main Panel**: Current chat display, document uploads, query input
-- **Session State**: Manages chats, file tracking, UI state using Streamlit's session_state
-
-## 📁 Project Structure
-
-```
-devdocs/
-├── main.py              # Streamlit application with UI and session management
-├── rag.py               # RAG pipeline (DevDocsCopilot class)
-├── pyproject.toml       # Project configuration and dependencies
-├── chats.json          # Persistent chat history (auto-generated)
-├── db/                 # ChromaDB vector store (auto-generated)
-└── README.md           # This file
-```
-
-## ⚙️ Configuration
-
-### RAG Parameters
-
-- **Model**: Phi3 via Ollama (`http://localhost:11434`)
-- **Chunk Size**: 400 characters
-- **Chunk Overlap**: 50 characters
-- **Retrieval Type**: Similarity score threshold
-- **Similarity Threshold**: 0.5
-- **Top K Results**: 2
-- **Temperature**: 0 (deterministic)
-
-### File Locations
-
-- **Chat History**: `chats.json`
-- **Vector Database**: `db/`
-- **Temp Files**: System temp directory (cleaned up after upload)
-
-## 🔄 Session Management
-
-- **Chat Sessions**: Independent conversation threads with unique names
-- **Session State**: Persisted across Streamlit reruns using `st.session_state`
-- **Chat Persistence**: All messages saved to `chats.json` automatically
-- **File Tracking**: Uploaded files tracked in memory with source metadata in ChromaDB
-
-## 💡 Key Implementation Details
-
-### Multi-Session Support
-
-- Chat sessions are stored in a dictionary with names as keys
-- Each session maintains its own message history
-- Switch between sessions with the dropdown selector
-- Sessions persist even after app restart
-
-### Document Tracking
-
-- Uploaded files are tracked in a set-based structure
-- Metadata includes original filename for deletion
-- When a document is deleted, all embeddings with matching source are removed
-- ChromaDB deletion uses metadata filtering
-
-### Prompt Engineering
-
-The assistant uses a strict prompt template that:
-- Enforces document-only answers
-- Rejects queries shorter than 3 characters
-- Returns "I don't know based on the document." when context doesn't contain the answer
-- Prioritizes phrases directly from documents
-
-## 📖 Usage Examples
-
-### Creating a New Chat
-1. Go to sidebar
-2. Enter a name in "New chat name" field
-3. Press Enter
-4. Chat is created and activated
-
-### Uploading Documents
-1. Click the upload area
-2. Select PDF files
-3. Wait for ingestion to complete
-4. Files appear in the tracking system
-
-### Querying with Context
-1. Upload relevant documents
-2. Ask specific questions related to document content
-3. Receive answers with document-based context
-4. View multiple chat sessions for different topics
-
-## 🎓 Learning Outcomes
-
-From building this project:
-- Implementing RAG pipelines with LangChain
-- Efficient vector search with ChromaDB
-- Streamlit session state management for complex UIs
-- LLM prompt engineering for consistency
-- PDF processing and text chunking strategies
-- Building multi-session applications with persistent state
-
-## 🤝 Contributing
-
-Contributions are welcome! Feel free to submit issues or pull requests.
-
-## 📝 License
-
-This project is open source and available under the MIT License.
-
-
+## Future Improvements
+* **Refine the Intent Classifier:** Adjust prompts to properly differentiate between requests to *extract* code and requests to *explain* code.
+* **Context-Aware Chunking:** Implement code-aware text splitters to prevent syntax blocks from being truncated across chunk boundaries during ingestion.
+* **Enhanced Query Rewriting:** Improve the chat history formatter to provide richer context to the rewriting LLM, preventing context loss on vague follow-ups.
