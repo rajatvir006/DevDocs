@@ -16,3 +16,8 @@ dependencies = [
     "streamlit>=1.56.0",
     "streamlit-chat>=0.1.1",
 ]
+
+[tool.pyrefly]
+# backend/ is the runtime working directory; engine.py and chat_store.py
+# are resolved as siblings of app.py, not from the project root.
+source_root = "backend"

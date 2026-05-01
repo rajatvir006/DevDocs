@@ -1,0 +1,49 @@
+# ============================================================
+#  DevDocs Copilot — Runtime Configuration
+#  All prompt text lives in prompts.yaml
+#  Tune k, thresholds, model, and chunking here.
+# ============================================================
+
+model:
+  name: phi3
+  base_url: http://localhost:11434
+  temperature: 0
+
+chunking:
+  # After MarkdownHeaderTextSplitter, secondary char split guard
+  chunk_size: 600
+  chunk_overlap: 100
+
+# ── Classifier ───────────────────────────────────────────────
+# Intents the LLM can assign. Must match keys in prompts.yaml
+classifier:
+  valid_intents:
+    - specific
+    - summarize
+    - code
+    - general
+  fallback_intent: general
+
+# ── Retrieval settings per intent ────────────────────────────
+# k             : number of chunks to retrieve
+# score_threshold: minimum cosine similarity (0–1)
+retrieval:
+  specific:
+    k: 8
+    score_threshold: 0.35
+
+  summarize:
+    k: 12
+    score_threshold: 0.25
+
+  code:
+    k: 8
+    score_threshold: 0.35    # code chunks may be sparse — cast a wider net
+
+  general:
+    k: 6
+    score_threshold: 0.30
+
+# ── History window ───────────────────────────────────────────
+history:
+  max_turns: 6               # last N user+assistant pairs included in prompt
