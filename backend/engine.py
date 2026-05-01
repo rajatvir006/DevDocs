@@ -83,24 +83,15 @@ _CLASSIFIER_PROMPT = PromptTemplate.from_template(_build_classifier_prompt())
 
 # ── History formatter (accepts plain list of message dicts) ───
 def _format_history(messages: list) -> str:
-    """
-    Format the last max_turns user+assistant pairs for the prompt.
-    messages: [{role: "user"|"assistant", content: "..."}, ...]
-    """
     max_turns = CONFIG.get("history", {}).get("max_turns", 6)
-    msgs  = messages[-(max_turns * 2):]
+    msgs = messages[-(max_turns * 2):]
     if not msgs:
         return "No previous conversation."
     lines = ["Conversation so far:"]
     for msg in msgs:
-        role = msg.get("role", "")
-        content = msg.get("content", "").strip()
-        if role == "user":
+        if msg.get("role") == "user":
+            content = msg.get("content", "").strip()
             lines.append(f"- User: {content}")
-        elif role == "assistant":
-            # Truncate long assistant responses to keep prompt concise
-            preview = content[:200] + "..." if len(content) > 200 else content
-            lines.append(f"- Assistant: {preview}")
     return "\n".join(lines)
 
 # ── PDF ingestion ─────────────────────────────────────────────
@@ -124,6 +115,34 @@ def _pdf_to_chunks(pdf_path: str, prefixed_source: str) -> list:
     for c in chunks:
         c.metadata["source"] = prefixed_source
     return filter_complex_metadata(chunks)
+
+FOLLOWUP_PROMPT = """
+You are a classifier.
+
+Decide whether the user's latest question is a FOLLOW-UP to the previous conversation.
+
+A question is a FOLLOW-UP if:
+
+* It depends on previous context
+* It uses vague references like "it", "that", "this"
+* It is incomplete alone ("why", "how", "tell more")
+
+A question is NOT a follow-up if:
+
+* It is self-contained
+* It introduces a new topic
+
+Return ONLY one word:
+YES or NO
+
+Conversation:
+{history}
+
+Question:
+{question}
+
+Answer:
+"""
 
 # ── Single shared engine ──────────────────────────────────────
 class DocCopilotEngine:
@@ -276,6 +295,24 @@ class DocCopilotEngine:
             pass
         return question
 
+    def _is_followup_llm(self, question: str, history_messages: list) -> bool:
+        history_text = _format_history(history_messages)
+    
+        if history_text == "No previous conversation.":
+            return False
+    
+        prompt = PromptTemplate.from_template(FOLLOWUP_PROMPT)
+    
+        try:
+            result = (prompt | self._llm | StrOutputParser()).invoke({
+                "history": history_text,
+                "question": question,
+            }).strip().upper()
+    
+            return result == "YES"
+        except:
+            return False
+
     # ── Answer ────────────────────────────────────────────────
     def ask(self, question: str, chat_id: str,
             history_messages: list, allowed_files: list = None) -> dict:
@@ -303,13 +340,25 @@ class DocCopilotEngine:
         logger.info("ISOLATION  chat=%s  allowed_files=%s", chat_id[:8], list(allowed_set))
 
         # Detect short / follow-up queries and rewrite for better retrieval
-        word_count = len(question.strip().split())
-        is_followup = word_count < 5 and len(history_messages) > 0
+        q = question.lower().strip()
+        
+        cheap_signal = (
+            len(q.split()) <= 4 or
+            any(p in q for p in ["it", "that", "this", "those"])
+        )
+        
+        if cheap_signal:
+            is_followup = self._is_followup_llm(question, history_messages)
+        else:
+            is_followup = False
         retrieval_query = question
         if is_followup:
             retrieval_query = self._rewrite_query(question, history_messages)
 
-        intent    = self.classify(question)
+        if is_followup:
+            intent = "specific"
+        else:
+            intent = self.classify(question)
         retriever = self._get_retriever(intent, allowed_files)
 
         # Use the (possibly rewritten) query for retrieval
@@ -337,6 +386,11 @@ class DocCopilotEngine:
         docs = docs[:max_chunks]
 
         context = "\n\n".join(d.page_content for d in docs)
+        has_code = "```" in context or any(
+            kw in context for kw in [
+                "class ", "def ", "#include", "public:", "private:"
+            ]
+        )
 
         # Strip prefix for display ("abc::report.pdf" → "report.pdf"), then deduplicate
         sources = list(dict.fromkeys(
@@ -347,7 +401,7 @@ class DocCopilotEngine:
         answer = (_ANSWER_PROMPTS[intent] | self._llm | StrOutputParser()).invoke({
             "context":  context,
             "question": question,
-            "history":  _format_history(history_messages),
+            "has_code": has_code,
         })
         logger.info("ANSWER  chat=%s  intent=%s  chunks=%d  sources=%s  followup=%s",
                     chat_id[:8], intent, len(docs), sources, is_followup)

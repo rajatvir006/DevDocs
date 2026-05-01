@@ -14,13 +14,25 @@ const displayName = (source) =>
 
 // ── Markdown renderer ─────────────────────────────────────────
 function MarkdownContent({ text }) {
+  const [copiedIndex, setCopiedIndex] = useState(null);
+
+  const handleCopy = async (code, idx) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedIndex(idx);
+      setTimeout(() => setCopiedIndex(null), 1500);
+    } catch (err) {
+      console.error("Copy failed", err);
+    }
+  };
+
   const parts = [];
   const fenceRe = /```(\w*)\n?([\s\S]*?)```/g;
   let last = 0, match;
   while ((match = fenceRe.exec(text)) !== null) {
     if (match.index > last)
       parts.push({ type: "text", content: text.slice(last, match.index) });
-    parts.push({ type: "code", lang: match[1] || "text", content: match[2].trimEnd() });
+    parts.push({ type: "code", lang: match[1] || "text", content: match[2].strip ? match[2].strip() : match[2].trimEnd() });
     last = match.index + match[0].length;
   }
   if (last < text.length) parts.push({ type: "text", content: text.slice(last) });
@@ -32,8 +44,8 @@ function MarkdownContent({ text }) {
           <div key={i} className="code-wrap">
             <div className="code-header">
               <span className="code-lang">{p.lang}</span>
-              <button className="copy-btn" onClick={() => navigator.clipboard.writeText(p.content)}>
-                Copy code
+              <button className="copy-btn" onClick={() => handleCopy(p.content, i)}>
+                {copiedIndex === i ? "Copied!" : "Copy"}
               </button>
             </div>
             <pre className="code-pre"><code>{p.content}</code></pre>
