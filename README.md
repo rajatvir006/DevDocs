@@ -1,9 +1,10 @@
 # DevDocs Copilot: RAG-based Document QA System
 
 ## Overview
-DevDocs Copilot is a Retrieval-Augmented Generation (RAG) based chat system designed to answer user questions strictly based on uploaded PDF documents. It features a conversational interface, document isolation per chat session, and specialized handling for different types of user intents, including factual queries, summaries, and code extraction. The system enforces strict grounding rules to ensure zero hallucination outside of the provided documents, and uses the Groq API for fast, cloud-based LLM inference.
+DevDocs Copilot is a Retrieval-Augmented Generation (RAG) based chat system designed to answer user questions strictly based on uploaded PDF documents. It features user authentication, a conversational chat interface, document isolation per chat session, and specialized handling for different query types including factual queries, summaries, and code extraction. The system enforces strict grounding rules to ensure zero hallucination outside of the provided documents, and uses the Groq API for fast, cloud-based LLM inference.
 
 ## Features
+* **User Authentication:** JWT-based register/login with bcrypt password hashing. Sessions persist across browser reloads.
 * **Document Ingestion:** Parses and chunks PDF documents into manageable segments.
 * **Vector Search:** Uses local FastEmbed embeddings and ChromaDB for similarity-based retrieval.
 * **Intent Classification:** Automatically categorizes user queries into specific intents (`general`, `specific`, `summarize`, `code`) to apply the most effective prompt.
@@ -16,20 +17,23 @@ DevDocs Copilot is a Retrieval-Augmented Generation (RAG) based chat system desi
 ## Architecture & Data Flow
 The system processes queries through a deterministic, multi-step pipeline:
 
-1. **User Query:** The user submits a question.
-2. **Follow-up Detection & Rewrite:** The system checks if the query relies on previous context (e.g., using pronouns like "it" or "that"). If so, it uses the chat history to rewrite the question into a fully self-contained query.
-3. **Intent Classification:** The Groq LLM classifies the query into an actionable intent (`specific`, `summarize`, `code`, `general`). If classification fails due to an API error, it falls back to `general` safely.
-4. **Retrieval:** The system queries ChromaDB using the rewritten query, filtering strictly by the documents uploaded in the current chat session.
-5. **Context Assembly:** The retrieved document chunks are assembled into a context block and passed through a Python-level post-filter to guarantee isolation.
-6. **Answer Generation:** Based on the classified intent, the context and question are passed to a prompt template to generate the final response via the Groq API. API errors return a graceful fallback message.
+1. **Auth Gate:** User registers or logs in. A JWT token is issued and stored client-side.
+2. **User Query:** The authenticated user submits a question. The JWT is sent with every request.
+3. **Follow-up Detection & Rewrite:** The system checks if the query relies on previous context. If so, it rewrites the question into a self-contained query.
+4. **Intent Classification:** The Groq LLM classifies the query into an actionable intent. If classification fails, it falls back to `general` safely.
+5. **Retrieval:** ChromaDB is queried using the rewritten query, filtering strictly by documents uploaded in the current chat session.
+6. **Context Assembly:** Retrieved chunks are passed through a Python-level post-filter to guarantee isolation.
+7. **Answer Generation:** The context and question are passed to a prompt template to generate the final response via Groq API.
 
 ## Tech Stack
 * **Backend Framework:** Flask, Python
+* **Authentication:** Flask-JWT-Extended + bcrypt
 * **LLM Orchestration:** LangChain
 * **LLM Provider:** Groq API (`llama-3.3-70b-versatile`)
 * **Vector Database:** ChromaDB (local persistence)
 * **Embeddings:** FastEmbed — `bge-small-en-v1.5` (runs locally, no API key needed)
 * **Document Parsing:** PyMuPDF
+* **Frontend:** React + Vite
 * **Environment Management:** python-dotenv
 
 ## Example Usage
@@ -40,7 +44,7 @@ The system processes queries through a deterministic, multi-step pipeline:
 
 **Query 2: Multi-Concept Reasoning**
 * **User:** "Explain priority queue and its relation to heap"
-* **System:** Structured Markdown response combining both concepts and their relationship, sourced from the document.
+* **System:** Structured Markdown response combining both concepts and their relationship.
 
 **Query 3: Out-of-Bounds Question**
 * **User:** "What is the capital of France?"
@@ -55,9 +59,9 @@ The system processes queries through a deterministic, multi-step pipeline:
 * **System:** Natural language explanation of the extracted code, grounded in the document context.
 
 ## Limitations
-* **Vague Follow-ups:** Extremely short or vague queries ("tell me more about it") may fail retrieval if the similarity score falls below the threshold, returning "I don't know based on the document."
-* **Truncated Code Extraction:** The chunking process can split long code blocks across chunk boundaries. The extraction bypass may return incomplete code if the full class spans multiple chunks.
-* **Single-process Persistence:** The `chats.json` store uses a threading lock, which is safe for single-process use but would require a cross-process lock or SQLite under a multi-worker production server.
+* **Vague Follow-ups:** Extremely short or vague queries ("tell me more about it") may fail retrieval if the similarity score falls below the threshold.
+* **Truncated Code Extraction:** Long code blocks split across chunk boundaries may return incomplete code during raw extraction.
+* **Single-process Persistence:** `chats.json` and `users.json` use a threading lock — safe for single-worker use but requires a cross-process lock or SQLite under multi-worker Gunicorn.
 
 ## Setup Instructions
 
@@ -67,17 +71,21 @@ The system processes queries through a deterministic, multi-step pipeline:
    source venv/bin/activate  # On Windows: .\venv\Scripts\activate
    ```
 
-2. **Install dependencies:**
+2. **Install backend dependencies:**
    ```bash
+   cd backend
    pip install -r requirements.txt
    ```
 
-3. **Configure your Groq API Key:**
-   Create a file named `.env` inside the `backend/` directory with the following content:
+3. **Configure environment variables:**
+   Create a file named `.env` inside the `backend/` directory:
    ```env
    GROQ_API_KEY="your-groq-api-key-here"
+   JWT_SECRET_KEY="any-long-random-secret-string"
    ```
-   Get a free API key at [console.groq.com](https://console.groq.com). The `.env` file is listed in `.gitignore` and will never be committed.
+   - Get a free Groq API key at [console.groq.com](https://console.groq.com)
+   - Generate a JWT secret: `python -c "import secrets; print(secrets.token_hex(32))"`
+   - The `.env` file is listed in `.gitignore` and will never be committed.
 
 4. **Run the backend:**
    ```bash
@@ -86,22 +94,41 @@ The system processes queries through a deterministic, multi-step pipeline:
    ```
    The API will be available at `http://localhost:5000`.
 
-5. **Run the frontend (optional):**
+5. **Run the frontend:**
    ```bash
    cd frontend
    npm install
    npm run dev
    ```
+   The UI will be available at `http://localhost:3000`.
 
-> **For production deployments**, set `FLASK_DEBUG=false` (default) in your environment and use a WSGI server:
+> **For production deployments**, use a WSGI server and set `FLASK_DEBUG=false`:
 > ```bash
 > pip install gunicorn
 > gunicorn -w 1 -b 0.0.0.0:5000 app:app
 > ```
 
-Basic evaluation scripts are included under `/tests` to validate performance and conversational behavior.
+## Deployment Notes (Render / Railway / VPS)
+
+| Item | Notes |
+|---|---|
+| Backend | Deploy `backend/` as a Python web service using `gunicorn -w 1 -b 0.0.0.0:$PORT app:app` |
+| Frontend | Deploy `frontend/` as a static site; set API base URL to your backend's public URL |
+| Environment variables | Set `GROQ_API_KEY`, `JWT_SECRET_KEY`, `FLASK_DEBUG=false` in the platform's env settings |
+| Persistent storage | `db/` directory (ChromaDB + chats.json + users.json) must be on a persistent volume |
+| CORS | Update `origins` in `app.py` from `"*"` to your frontend's deployed URL |
+
+## Tests
+Basic evaluation scripts are included under `/tests` to validate performance and conversational behavior:
+```bash
+# From project root
+python tests/test_basic.py
+python tests/test_behavior.py
+python tests/test_performance.py
+```
 
 ## Future Improvements
-* **Context-Aware Chunking:** Use a code-aware text splitter to prevent class/function definitions from being truncated across chunk boundaries during ingestion.
-* **Cross-process Persistence:** Replace `chats.json` with SQLite or add a `filelock` for safe multi-worker deployments.
+* **Context-Aware Chunking:** Use a code-aware text splitter to prevent class/function definitions from being truncated across chunk boundaries.
+* **Cross-process Persistence:** Replace `chats.json` / `users.json` with SQLite for safe multi-worker deployments.
 * **Rate Limit Retry Logic:** Add exponential backoff for Groq API `429 Too Many Requests` responses under heavy load.
+* **Google OAuth:** Add "Sign in with Google" as an alternative to email/password auth.

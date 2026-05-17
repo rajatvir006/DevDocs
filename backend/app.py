@@ -3,7 +3,9 @@ import tempfile
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from flask_jwt_extended import JWTManager, jwt_required
 
+from auth import auth_bp
 from engine import get_engine, logger
 from chat_store import (
     create_chat, list_chats, load_chat, save_chat,
@@ -12,6 +14,12 @@ from chat_store import (
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
+
+# ── JWT ────────────────────────────────────────────────────────
+app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "change-me-in-production")
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False   # tokens don't expire (suitable for dev/demo)
+jwt = JWTManager(app)
+app.register_blueprint(auth_bp)
 
 
 @app.get("/api/health")
@@ -22,6 +30,7 @@ def health():
 # ── Chats ──────────────────────────────────────────────────────
 
 @app.post("/api/chats")
+@jwt_required()
 def create_chat_route():
     body       = request.get_json(force=True)
     session_id = (body.get("session_id") or "").strip()
@@ -33,6 +42,7 @@ def create_chat_route():
 
 
 @app.get("/api/chats")
+@jwt_required()
 def list_chats_route():
     session_id = request.args.get("session_id", "").strip()
     if not session_id:
@@ -41,6 +51,7 @@ def list_chats_route():
 
 
 @app.get("/api/chats/<chat_id>")
+@jwt_required()
 def load_chat_route(chat_id: str):
     session_id = request.args.get("session_id", "").strip()
     if not session_id:
@@ -52,6 +63,7 @@ def load_chat_route(chat_id: str):
 
 
 @app.delete("/api/chats/<chat_id>")
+@jwt_required()
 def delete_chat_route(chat_id: str):
     session_id = request.args.get("session_id", "").strip()
     if not session_id:
@@ -69,6 +81,7 @@ def delete_chat_route(chat_id: str):
 
 
 @app.patch("/api/chats/<chat_id>")
+@jwt_required()
 def rename_chat_route(chat_id: str):
     body       = request.get_json(force=True)
     session_id = (body.get("session_id") or "").strip()
@@ -82,6 +95,7 @@ def rename_chat_route(chat_id: str):
 # ── Chat (send message) ────────────────────────────────────────
 
 @app.post("/api/chat")
+@jwt_required()
 def chat():
     body       = request.get_json(force=True)
     question   = (body.get("question") or "").strip()
@@ -120,6 +134,7 @@ def chat():
 # ── Files ──────────────────────────────────────────────────────
 
 @app.get("/api/files")
+@jwt_required()
 def list_files():
     chat_id    = request.args.get("chat_id", "").strip()
     session_id = request.args.get("session_id", "").strip()
@@ -134,6 +149,7 @@ def list_files():
 
 
 @app.post("/api/files")
+@jwt_required()
 def upload_file():
     chat_id    = request.form.get("chat_id", "").strip()
     session_id = request.form.get("session_id", "").strip()
@@ -177,6 +193,7 @@ def upload_file():
 
 
 @app.delete("/api/files/<path:file_name>")
+@jwt_required()
 def delete_file(file_name: str):
     chat_id    = request.args.get("chat_id", "").strip()
     session_id = request.args.get("session_id", "").strip()

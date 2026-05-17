@@ -1,10 +1,15 @@
+import { getToken } from "./auth.js";
+
 const BASE = "/api";
 
 async function req(path, options = {}) {
-  const res = await fetch(`${BASE}${path}`, options);
+  const token = getToken();
+  const headers = { ...(options.headers || {}) };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(`${BASE}${path}`, { ...options, headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || res.statusText);
+    throw new Error(err.error || err.msg || res.statusText);
   }
   return res.json();
 }

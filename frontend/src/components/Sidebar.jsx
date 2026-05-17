@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 
-export default function Sidebar({ chats, activeId, onNew, onSelect, onDelete, onRename }) {
+export default function Sidebar({ chats, activeId, onNew, onSelect, onDelete, onRename, user, onLogout }) {
   const [editingId, setEditingId] = useState(null);
   const [editVal, setEditVal]     = useState("");
   const inputRef = useRef(null);
@@ -97,8 +97,11 @@ export default function Sidebar({ chats, activeId, onNew, onSelect, onDelete, on
       <div className="sidebar-footer">
         <div className="sidebar-footer-info">
           <span className="footer-dot" />
-          DevDocs Copilot
+          {user?.name || "DevDocs Copilot"}
         </div>
+        <button className="logout-btn" onClick={onLogout} title="Sign out">
+          ⎋ Sign out
+        </button>
       </div>
     </aside>
   );

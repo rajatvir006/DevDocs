@@ -1,7 +1,9 @@
 import { useState, useCallback, useEffect } from "react";
 import Sidebar from "./components/Sidebar.jsx";
 import ChatWindow from "./components/ChatWindow.jsx";
+import AuthPage from "./components/AuthPage.jsx";
 import { createChat, listChats, loadChat, deleteChat, renameChat } from "./api.js";
+import { isLoggedIn, clearAuth, getUser } from "./auth.js";
 
 // ── Session ID: persisted in localStorage as a lightweight user boundary.
 // Never sent to ChromaDB — only used to scope chats in chats.json.
@@ -18,6 +20,18 @@ const SESSION_ID = getOrCreateSessionId();
 export { SESSION_ID };
 
 export default function App() {
+  const [authed, setAuthed] = useState(isLoggedIn());
+
+  // If not logged in, show the auth page
+  if (!authed) {
+    return <AuthPage onAuth={() => setAuthed(true)} />;
+  }
+
+  return <MainApp onLogout={() => { clearAuth(); setAuthed(false); }} />;
+}
+
+function MainApp({ onLogout }) {
+  const user = getUser();
   // chats: [{id, name, messages, files, _loaded}]
   // files contains exact metadata.source values: "{chat_id}::{file_name}"
   const [chats, setChats]     = useState([]);
@@ -189,6 +203,8 @@ export default function App() {
         onSelect={handleSelectChat}
         onDelete={handleDeleteChat}
         onRename={handleRenameChat}
+        user={user}
+        onLogout={onLogout}
       />
       <div className="main">
         {activeChat ? (
