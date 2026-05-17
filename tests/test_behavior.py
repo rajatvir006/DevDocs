@@ -5,15 +5,26 @@ import time
 BASE_URL = "http://localhost:5000/api"
 SESSION_ID = "eval-test-session"
 
-res = requests.post(f"{BASE_URL}/chats", json={"session_id": SESSION_ID})
+# Authenticate first
+auth_res = requests.post(f"{BASE_URL}/auth/register", json={
+    "name": "Test User", "email": "test-eval@example.com", "password": "password123"
+})
+if auth_res.status_code == 409: # Already exists
+    auth_res = requests.post(f"{BASE_URL}/auth/login", json={
+        "email": "test-eval@example.com", "password": "password123"
+    })
+TOKEN = auth_res.json()["token"]
+headers = {"Authorization": f"Bearer {TOKEN}"}
+
+res = requests.post(f"{BASE_URL}/chats", json={"session_id": SESSION_ID}, headers=headers)
 chat_id = res.json()["chat_id"]
 test_pdf = os.path.join(os.path.dirname(__file__), "test_data.pdf")
 with open(test_pdf, "rb") as f:
-    res = requests.post(f"{BASE_URL}/files", data={"chat_id": chat_id, "session_id": SESSION_ID}, files={"file": ("test_data.pdf", f)})
+    res = requests.post(f"{BASE_URL}/files", data={"chat_id": chat_id, "session_id": SESSION_ID}, files={"file": ("test_data.pdf", f)}, headers=headers)
 
 def ask(q):
     print(f"\n--- Q: {q} ---")
-    res = requests.post(f"{BASE_URL}/chat", json={"chat_id": chat_id, "session_id": SESSION_ID, "question": q})
+    res = requests.post(f"{BASE_URL}/chat", json={"chat_id": chat_id, "session_id": SESSION_ID, "question": q}, headers=headers)
     if res.status_code == 200:
         data = res.json()
         print(f"Intent: {data.get('intent')}")

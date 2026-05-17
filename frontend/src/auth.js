@@ -4,6 +4,8 @@
 const TOKEN_KEY = "devdocs_token";
 const USER_KEY  = "devdocs_user";
 
+const BASE = import.meta.env.VITE_API_URL || "/api";
+
 export function getToken()  { return localStorage.getItem(TOKEN_KEY); }
 export function getUser()   { return JSON.parse(localStorage.getItem(USER_KEY) || "null"); }
 export function isLoggedIn(){ return !!getToken(); }
@@ -22,7 +24,7 @@ export function clearAuth() {
 
 // Call backend register endpoint
 export async function register(name, email, password) {
-  const res = await fetch("/api/auth/register", {
+  const res = await fetch(`${BASE}/auth/register`, {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
     body:    JSON.stringify({ name, email, password }),
@@ -35,7 +37,7 @@ export async function register(name, email, password) {
 
 // Call backend login endpoint
 export async function login(email, password) {
-  const res = await fetch("/api/auth/login", {
+  const res = await fetch(`${BASE}/auth/login`, {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
     body:    JSON.stringify({ email, password }),
