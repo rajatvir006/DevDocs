@@ -1,6 +1,8 @@
 import { getToken } from "./auth.js";
 
-const BASE = "/api";
+// In dev, Vite proxies /api → localhost:5000.
+// In production (Render), set VITE_API_URL to your backend URL.
+const BASE = import.meta.env.VITE_API_URL || "/api";
 
 async function req(path, options = {}) {
   const token = getToken();

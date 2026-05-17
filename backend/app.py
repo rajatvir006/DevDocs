@@ -13,7 +13,8 @@ from chat_store import (
 )
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+_frontend_url = os.getenv("FRONTEND_URL", "*")
+CORS(app, resources={r"/api/*": {"origins": _frontend_url}})
 
 # ── JWT ────────────────────────────────────────────────────────
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "change-me-in-production")
