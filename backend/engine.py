@@ -4,13 +4,13 @@ import logging
 from typing import Optional
 
 import yaml
+from dotenv import load_dotenv
 
-try:
-    from langchain_chroma import Chroma
-except ImportError:
-    from langchain_community.vectorstores import Chroma
+# Load environment variables (e.g. GROQ_API_KEY) from .env file securely
+load_dotenv()
 
-from langchain_ollama import ChatOllama
+from langchain_chroma import Chroma
+from langchain_groq import ChatGroq
 from langchain_community.embeddings import FastEmbedEmbeddings
 from langchain_core.output_parsers import StrOutputParser
 from langchain_community.document_loaders import PyMuPDFLoader
@@ -156,9 +156,8 @@ class DocCopilotEngine:
         self.persist_dir = os.path.join(_BACKEND_DIR, "db", "shared")
         self._embeddings = FastEmbedEmbeddings()
         model_cfg = CONFIG.get("model", {})
-        self._llm = ChatOllama(
-            model=model_cfg.get("name", "phi3"),
-            base_url=model_cfg.get("base_url", "http://localhost:11434"),
+        self._llm = ChatGroq(
+            model=model_cfg.get("name", "llama3-8b-8192"),
             temperature=model_cfg.get("temperature", 0),
         )
         self._vector_store: Optional[Chroma] = None
@@ -257,11 +256,15 @@ class DocCopilotEngine:
     def classify(self, question: str) -> str:
         valid    = CONFIG["classifier"]["valid_intents"]
         fallback = CONFIG["classifier"]["fallback_intent"]
-        raw      = (_CLASSIFIER_PROMPT | self._llm | StrOutputParser()).invoke({"question": question}).strip().lower()
-        first    = re.split(r"[\s\n,.\-:]+", raw)[0]
-        intent   = first if first in valid else next((v for v in valid if v in raw), fallback)
-        logger.info("CLASSIFY  intent=%-10s  raw=%r  q=%r", intent, raw, question[:60])
-        return intent
+        try:
+            raw   = (_CLASSIFIER_PROMPT | self._llm | StrOutputParser()).invoke({"question": question}).strip().lower()
+            first = re.split(r"[\s\n,.\-:]+", raw)[0]
+            intent = first if first in valid else next((v for v in valid if v in raw), fallback)
+            logger.info("CLASSIFY  intent=%-10s  raw=%r  q=%r", intent, raw, question[:60])
+            return intent
+        except Exception as e:
+            logger.warning("CLASSIFY  failed (LLM error), using fallback=%s  err=%s", fallback, e)
+            return fallback
 
     # ── Query rewriter for follow-ups ───────────────────────────
     def _rewrite_query(self, question: str, history_messages: list) -> str:
@@ -413,11 +416,15 @@ class DocCopilotEngine:
                     "sources": sources
                 }
 
-        answer = (_ANSWER_PROMPTS[intent] | self._llm | StrOutputParser()).invoke({
-            "context":  context,
-            "question": question,
-            "has_code": has_code,
-        })
+        try:
+            answer = (_ANSWER_PROMPTS[intent] | self._llm | StrOutputParser()).invoke({
+                "context":  context,
+                "question": question,
+                "has_code": has_code,
+            })
+        except Exception as e:
+            logger.error("ANSWER  chat=%s  LLM call failed  err=%s", chat_id[:8], e)
+            return {"answer": "The AI model is temporarily unavailable. Please try again in a moment.", "intent": intent, "sources": sources}
         logger.info("ANSWER  chat=%s  intent=%s  chunks=%d  sources=%s  followup=%s",
                     chat_id[:8], intent, len(docs), sources, is_followup)
         return {"answer": answer, "intent": intent, "sources": sources}

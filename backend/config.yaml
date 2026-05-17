@@ -5,8 +5,7 @@
 # ============================================================
 
 model:
-  name: phi3
-  base_url: http://localhost:11434
+  name: llama-3.3-70b-versatile
   temperature: 0
 
 chunking:
